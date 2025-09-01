@@ -16,10 +16,6 @@ writeShellApplication {
       lsblk -Sno path,model | grep -F 'nRF UF2' | cut -d' ' -f1
     }
 
-    mounted() {
-      findmnt "$device" -no target
-    }
-
     flash=("$@")
     parts=(${toString firmware.parts or ""})
 
@@ -40,37 +36,23 @@ writeShellApplication {
 
     for part in "''${flash[@]}"; do
       echo -n "Double tap reset and plug in$([ -n "$part" ] && echo " the '$part' part of") the keyboard via USB"
-      while ! device="$(available)"; do
+      while ! available > /dev/null; do
         echo -n .
-        sleep 3
+        sleep 1
       done
       echo
 
-      sleep 1
+      mntdir=$(mktemp -d)
 
-      if ! mountpoint="$(mounted)"; then
-        echo -n "Please mount the mass storage device at $device so that the firmware file can be copied"
-        while ! mountpoint="$(mounted)"; do
-          echo -n .
-          sleep 3
-        done
-      fi
-      echo
+      doas mount -o uid=1000,gid=100 /dev/disk/by-label/XIAO-SENSE "$mntdir"
 
-      cp ${firmware}/*"$([ -n "$part" ] && echo "_$part")".uf2 "$mountpoint"
+      cp ${firmware}/*"$([ -n "$part" ] && echo "_$part")".uf2 "$mntdir"
 
       echo "Firmware copy complete."
 
-      sleep 1
+      doas umount "$mntdir"
 
-      if mounted >/dev/null && available >/dev/null; then
-        echo -n "Please unmount the mass storage device at $device and disconnect$([ -n "$part" ] && echo " the '$part' part of") the keyboard via USB"
-        while mounted >/dev/null && available >/dev/null; do
-          echo -n .
-          sleep 3
-        done
-      fi
-      echo
+      echo "Done !"
     done
   '';
 
